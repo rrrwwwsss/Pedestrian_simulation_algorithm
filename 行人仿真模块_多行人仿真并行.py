@@ -259,11 +259,27 @@ def zhixingfangzhen(index1,distance_matrix,road_shp, point_shp,speed,max_time,su
         # 可选：在节点上标注名称
         # nx.draw_networkx_labels(G, pos, font_size=10)
 
-        plt.title(f"道路热力图 —— 行人路过次数  (R2:{r2:.4f})")
+        plt.title(f"道路热力图 —— 行人路过次数")
         plt.axis("off")
         plt.tight_layout()
         plt.savefig(f"./结果/图片/{index1}.png")
         plt.show()
+        # 生成csv
+        # 遍历图中的节点，提取属性
+        records = []
+        for u, v, data in G.edges(data=True):
+            record = {
+                'Id': data.get('Id', 0),  # 边的唯一标识（或用 tuple）
+                'count': data.get('count', 0),
+                'people_v': data.get('people_v', 0)
+            }
+            records.append(record)
+
+        # 转为 DataFrame
+        df = pd.DataFrame(records)
+
+        # 保存为 CSV
+        df.to_csv(f"./结果/表/{index1}.csv", index=False, encoding='utf-8-sig')
         return r2
     else:
         print("没有有效数据。")
