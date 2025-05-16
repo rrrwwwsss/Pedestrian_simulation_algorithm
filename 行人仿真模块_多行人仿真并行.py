@@ -9,6 +9,8 @@ import numpy as np
 from joblib import Parallel, delayed
 from collections import defaultdict
 from sklearn.metrics import r2_score
+from typing import Optional, Tuple
+import pandas as pd
 # ─── 1. 假设已经有一个 NetworkX 图 G ─────────────────────────
 
 
@@ -20,8 +22,9 @@ class PedestrianEnv(gym.Env):
     """
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, G,  max_time, speed=1.0,max_deg=4,sumPeople=30):#所有“没有默认值的参数”必须出现在“有默认值的参数”前面。
+    def __init__(self, G,distance_matrix,  max_time, speed=1.0,max_deg=4,sumPeople=30):#所有“没有默认值的参数”必须出现在“有默认值的参数”前面。
         super().__init__()#调用父类（基类）的初始化方法。
+        self.distance_matrix = distance_matrix
         self.sumPeople = sumPeople
         self.G = G
         self.speed = speed
@@ -37,17 +40,47 @@ class PedestrianEnv(gym.Env):
 
         self.reset()
 
-    def reset(self):
-        # 随机选出生点
-        starts = []
-        for n, d in self.G.nodes(data=True):#data=True 告诉 NetworkX：“请把每个节点的 G.nodes[node]（属性字典）也返回给我”
-            # 如果节点属性里 chushengdian=True，就把它加入列表
-            if d.get("chushengdian", False):#.get(..., False) 保证属性缺失时默认为 False
-                starts.append(n)
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple:
+        # 加载 CSV 文件
+        df = pd.read_csv("./实验数据/建筑物点_出生点.csv", encoding='utf-8')
 
-        if not starts:
-            raise RuntimeError("没有任何 chushengdian=True 的节点！")
-        self.current = random.choice(starts)
+        # 加载距离矩阵（这里假设你已经从 shapefile 计算好了）
+        # 距离矩阵的行是 Id（字符串），列是 cid（字符串）
+        distance_matrix = self.distance_matrix
+
+        # 从所有 Id 中，按概率列随机抽取一个 Id（只取一个）
+        target_id = df[['Id', '概率']].drop_duplicates().sample(
+            weights='概率',
+            n=1
+        )['Id'].values[0]
+
+        # 2. 找出该 Id 对应的所有 cid（保持为字符串用于索引）
+        target_cids = df[df['Id'] == target_id]['cid'].astype(str).tolist()
+
+        # 3. 提取该 Id 到这些 cid 的距离
+        # 确保 Id 和 cid 都是字符串类型（用于索引）
+        id_str = str(target_id)
+        distances = distance_matrix.loc[id_str, target_cids]
+
+        # 4. 将距离转换为概率（距离越近，概率越高），做反比例归一化（防止除 0）
+        eps = 1e-6
+        inv_dist = 1 / (distances + eps)
+        probs = inv_dist / inv_dist.sum()
+
+        # 5. 输出结果
+        result = pd.DataFrame({'cid': target_cids, 'probability': probs.values})
+        # 按概率随机选择一个 cid
+        selected_cid = result.sample(weights=result['probability'], n=1)['cid'].values[0]
+
+        print(f"最终选择的 cid 是: {selected_cid}")
+        for n, data in self.G.nodes(data=True):
+            print(f"节点编号: {n}, cid: {data.get('cid')}")
+        for n, d in self.G.nodes(data=True):
+            if str(d.get('cid')) == str(selected_cid):
+                self.current = n
+                break
+        else:
+            raise ValueError(f"找不到 cid={selected_cid} 对应的图节点！")
         self.prev_node = None            # 上一步走过的节点，重置为空
         self.time_left = self.max_time
         self.path = [self.current]
@@ -124,7 +157,7 @@ def sma_policy(obs, env: PedestrianEnv, max_iter=100): #max_iter：最大迭代�
 import matplotlib.pyplot as plt
 
 
-def zhixingfangzhen(index1,road_shp, point_shp,speed,max_time,sumPeople):
+def zhixingfangzhen(index1,distance_matrix,road_shp, point_shp,speed,max_time,sumPeople):
     plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置中文黑体
     plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
     from 道路建模 import generate_network
@@ -136,7 +169,7 @@ def zhixingfangzhen(index1,road_shp, point_shp,speed,max_time,sumPeople):
     # 单个行人仿真函数
     def simulate_one_person(speed, max_time, max_deg):
 
-        env = PedestrianEnv(G, speed=speed, max_time=max_time, max_deg=max_deg)
+        env = PedestrianEnv(G,distance_matrix, speed=speed, max_time=max_time, max_deg=max_deg)
 
         obs = env.reset()
         done = False
