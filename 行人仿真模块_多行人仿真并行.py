@@ -279,7 +279,7 @@ def zhixingfangzhen(index1,distance_matrix,road_shp, point_shp,speed,max_time,su
         df = pd.DataFrame(records)
 
         # 保存为 CSV
-        df.to_csv(f"./结果/表/{index1}.csv", index=False, encoding='utf-8-sig')
+        df.to_csv(f"./结果/表/{index1}_{round(r2,4)}.csv", index=False, encoding='utf-8-sig')
         return r2
     else:
         print("没有有效数据。")

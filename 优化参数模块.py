@@ -49,6 +49,9 @@ def get_r(*a,distance_matrix):
     # print("参数权重：",a)#a[0]
     global index1
     index1 = index1 + 1
+    with open(f"./结果/权重/{index1}.txt","w") as f:
+        f.write(str(weights))
+    print(f"已保存到./结果/权重/{index1}.txt")
     r = zhixingfangzhen(index1,distance_matrix,road_shp=save_name, point_shp="./实验数据/出生点.shp",speed=1.0,max_time=1800,sumPeople=260)
 
     return r
